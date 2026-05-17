@@ -269,7 +269,7 @@ pause
 
             # 生成 checksums.json（在文件转换完成后，确保校验和准确）
             checksums = Packager.generate_checksums(packages_dir)
-            with open(packages_dir / "checksums.json", "w", encoding="utf-8") as f:
+            with open(packages_dir / "checksums.json", "w", encoding="utf-8-sig") as f:
                 json.dump(checksums, f, ensure_ascii=False, indent=2)
 
             # 生成安装脚本
@@ -278,11 +278,11 @@ pause
                     package_names,
                     runtime_info.get("filename", "") if runtime_info else "",
                 )
-                with open(export_dir / "install_python.bat", "w", encoding="utf-8") as f:
+                with open(export_dir / "install_python.bat", "w", encoding="utf-8-sig") as f:
                     f.write(bat_content)
             elif lang == "r":
                 bat_content = Packager.generate_r_bat(package_files, has_rtools)
-                with open(export_dir / "install_r.bat", "w", encoding="utf-8") as f:
+                with open(export_dir / "install_r.bat", "w", encoding="utf-8-sig") as f:
                     f.write(bat_content)
 
             # 打包为 zip
