@@ -36,62 +36,63 @@ class Packager:
         runtime_block = ""
         if runtime_name:
             runtime_block = f"""set RUNTIME_FILE={runtime_name}
-if not exist ".\\runtime\\%RUNTIME_FILE%" (
-    echo [INFO] 未检测到运行时安装包，跳过运行时安装
+if not exist \".\\\runtime\\%RUNTIME_FILE%\" (
+    echo [INFO] Runtime installer not found, skip runtime installation
 ) else (
-    echo [INFO] 检测到运行时安装包，如需要请手动安装: .\\runtime\\%RUNTIME_FILE%
+    echo [INFO] Runtime installer found: .\\\runtime\\%RUNTIME_FILE%
 )
 """
 
         return f"""@echo off
 chcp 65001 >nul
 :: ============================================
-:: Python 包离线安装脚本 - 由下载器自动生成
-:: 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+:: Python Package Offline Installer - Auto-generated
+:: Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 :: ============================================
 
-:: 1. 检测 Python 是否已安装
+:: 1. Check if Python is installed
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARNING] 未检测到 Python，请先安装 Python 运行时！
-    echo 安装包位于本目录下的 runtime\\ 文件夹中
-{runtime_block}    echo 安装完成后重新运行此脚本
+    echo [WARNING] Python not found! Please install Python first.
+    echo Runtime installer located in .\\\runtime\ folder
+{runtime_block}    echo Then re-run this script.
     pause
     exit /b 1
 )
 
-:: 2. 检测 Python 版本兼容性
+:: 2. Check Python version compatibility
 python -c "import sys; ver=sys.version_info; exit(0 if ver.major==3 and ver.minor>=8 else 1)"
 if %errorlevel% neq 0 (
-    echo [WARNING] Python 版本过低（需要 ≥ 3.8），请升级后重试
+    echo [WARNING] Python version too old (need ^>= 3.8). Please upgrade.
     pause
     exit /b 1
 )
 
-:: 3. 校验包文件完整性
-echo 正在校验包文件完整性...
-python -c "import hashlib, json; f=open('./packages/checksums.json'); d=json.load(f); ok=True
-for fn,sha in d.items(): h=hashlib.sha256(open(f'./packages/{{fn}}','rb').read()).hexdigest(); print(f'  {{fn}}: {{"✅" if h==sha else "❌"}}'); ok=ok and (h==sha)
+:: 3. Verify package file integrity
+echo Verifying package integrity...
+python -c "import hashlib, json; f=open('./packages/checksums.json', encoding='utf-8-sig'); d=json.load(f); ok=True
+for fn,sha in d.items(): h=hashlib.sha256(open(f'./packages/{fn}','rb').read()).hexdigest(); print(f'  {fn}: {"OK" if h==sha else "FAIL"}'); ok=ok and (h==sha)
 exit(0 if ok else 1)"
 if %errorlevel% neq 0 (
-    echo [ERROR] 文件校验失败，部分包可能不完整，请重新下载
+    echo [ERROR] Checksum verification failed! Some packages may be corrupted.
+    echo Please re-download from the server.
     pause
     exit /b 1
 )
 
-:: 4. 离线安装
-echo 正在安装包...
-pip install --no-index --find-links=.\\packages {pkg_list}
+:: 4. Offline install
+echo Installing packages...
+pip install --no-index --find-links=.\\\packages {pkg_list}
 if %errorlevel% equ 0 (
-    echo ✅ 全部安装成功！
+    echo All packages installed successfully!
 ) else (
-    echo ❌ 部分包安装失败，请检查错误信息后重试
+    echo Some packages failed to install. Please check the error messages.
 )
 
-:: 5. 验证安装
-python -c "import {package_names[0] if package_names else ''}; print('✅ 主包安装成功!')" 2>nul || echo 验证跳过
+:: 5. Verify installation
+python -c "import {package_names[0] if package_names else ''}; print('Main package installed successfully!')" 2>nul || echo Verification skipped.
 echo.
-echo 安装完成！按任意键退出...
+echo Installation complete! Press any key to exit...
 pause
 """
 
@@ -137,14 +138,14 @@ pause
         rtools_block = ""
         if has_rtools:
             rtools_block = """
-:: 3. 如果包含 rtools/ → 先静默安装 Rtools
-if exist .\\runtime\\rtools*.exe (
-    echo 检测到 Rtools 安装包，正在静默安装...
-    .\\runtime\\rtools*.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+:: 3. Install Rtools silently if bundled
+if exist .\\\runtime\\\rtools*.exe (
+    echo Installing Rtools silently...
+    .\\\runtime\\\rtools*.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
     if %errorlevel% neq 0 (
-        echo [WARNING] Rtools 安装失败，请手动安装
+        echo [WARNING] Rtools installation failed. Please install manually.
     ) else (
-        echo ✅ Rtools 安装成功
+        echo Rtools installed successfully.
     )
 )
 """
@@ -152,39 +153,39 @@ if exist .\\runtime\\rtools*.exe (
         return f"""@echo off
 chcp 65001 >nul
 :: ============================================
-:: R 包离线安装脚本 - 由下载器自动生成
-:: 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+:: R Package Offline Installer - Auto-generated
+:: Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 :: ============================================
 
-:: 1. 检测 R 是否已安装
+:: 1. Check if R is installed
 Rscript --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARNING] 未检测到 R，请先安装 R 运行时！
-    echo 安装包位于本目录下的 runtime\\ 文件夹中
-    echo 请手动运行相应安装包后重新运行此脚本
+    echo [WARNING] R not found! Please install R first.
+    echo Runtime installer located in .\\\runtime\ folder
+    echo Run the installer manually, then re-run this script.
     pause
     exit /b 1
 )
 
-:: 2. 获取 R library 路径
+:: 2. Get R library path
 for /f "tokens=*" %%i in ('Rscript -e "cat(.libPaths()[1])"') do set R_LIB=%%i
-echo R library 路径: %R_LIB%{rtools_block}
+echo R library path: %R_LIB%{rtools_block}
 
-:: 4. 安装包（所有包均为 .tar.gz 格式，兼容 RStudio）
-echo 正在安装 R 包...
+:: 4. Install packages (all .tar.gz format, RStudio compatible)
+echo Installing R packages...
 R CMD INSTALL --library="%R_LIB%" {pkg_install}
 
-:: 5. 验证安装
+:: 5. Verify installation
 echo.
-echo 正在验证安装...
-Rscript -e "cat('✅ 安装完成!')"
+echo Verifying installation...
+Rscript -e "cat('Installation verified!')"
 if %errorlevel% equ 0 (
-    echo ✅ 全部安装成功！
+    echo All packages installed successfully!
 ) else (
-    echo ❌ 部分包安装失败，请检查错误信息后重试
+    echo Some packages failed to install. Please check the error messages.
 )
 echo.
-echo 安装完成！按任意键退出...
+echo Installation complete! Press any key to exit...
 pause
 """
 
