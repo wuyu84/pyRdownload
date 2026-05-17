@@ -36,15 +36,14 @@ class Packager:
         runtime_block = ""
         if runtime_name:
             runtime_block = f"""set RUNTIME_FILE={runtime_name}
-if not exist \".\\\runtime\\%RUNTIME_FILE%\" (
+if not exist \".\\runtime\\%RUNTIME_FILE%\" (
     echo [INFO] Runtime installer not found, skip runtime installation
 ) else (
-    echo [INFO] Runtime installer found: .\\\runtime\\%RUNTIME_FILE%
+    echo [INFO] Runtime installer found: .\\runtime\\%RUNTIME_FILE%
 )
 """
 
         return f"""@echo off
-chcp 65001 >nul
 :: ============================================
 :: Python Package Offline Installer - Auto-generated
 :: Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
@@ -54,7 +53,7 @@ chcp 65001 >nul
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [WARNING] Python not found! Please install Python first.
-    echo Runtime installer located in .\\\runtime\ folder
+    echo Runtime installer located in .\\runtime\ folder
 {runtime_block}    echo Then re-run this script.
     pause
     exit /b 1
@@ -71,7 +70,7 @@ if %errorlevel% neq 0 (
 :: 3. Verify package file integrity
 echo Verifying package integrity...
 python -c "import hashlib, json; f=open('./packages/checksums.json', encoding='utf-8-sig'); d=json.load(f); ok=True
-for fn,sha in d.items(): h=hashlib.sha256(open(f'./packages/{fn}','rb').read()).hexdigest(); print(f'  {fn}: {"OK" if h==sha else "FAIL"}'); ok=ok and (h==sha)
+for fn,sha in d.items(): h=hashlib.sha256(open(f'./packages/{{fn}}','rb').read()).hexdigest(); print(f'  {{fn}}: {{"OK" if h==sha else "FAIL"}}'); ok=ok and (h==sha)
 exit(0 if ok else 1)"
 if %errorlevel% neq 0 (
     echo [ERROR] Checksum verification failed! Some packages may be corrupted.
@@ -82,7 +81,7 @@ if %errorlevel% neq 0 (
 
 :: 4. Offline install
 echo Installing packages...
-pip install --no-index --find-links=.\\\packages {pkg_list}
+pip install --no-index --find-links=.\packages {pkg_list}
 if %errorlevel% equ 0 (
     echo All packages installed successfully!
 ) else (
@@ -92,7 +91,11 @@ if %errorlevel% equ 0 (
 :: 5. Verify installation
 python -c "import {package_names[0] if package_names else ''}; print('Main package installed successfully!')" 2>nul || echo Verification skipped.
 echo.
-echo Installation complete! Press any key to exit...
+echo ============================================
+echo  Installation complete! Check results above.
+echo ============================================
+echo.
+echo Press any key to close this window...
 pause
 """
 
@@ -131,62 +134,145 @@ pause
     @staticmethod
     def generate_r_bat(package_files: list[str], has_rtools: bool = False) -> str:
         """生成 install_r.bat（所有包均为 .tar.gz 格式）"""
-        pkg_install = " ".join(
-            f'.\\packages\\{f}' for f in package_files
+        if not package_files:
+            return "@echo off\necho No packages to install.\npause\n"
+
+        # 构建逐包列表（供 for 循环使用）
+        pkg_list_lines = "\n".join(
+            f"    {f}" for f in package_files
         )
 
+        # Rtools 安装块（带 RT_INSTALLED 标志防重复）
         rtools_block = ""
         if has_rtools:
             rtools_block = """
 :: 3. Install Rtools silently if bundled
-if exist .\\\runtime\\\rtools*.exe (
-    echo Installing Rtools silently...
-    .\\\runtime\\\rtools*.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
-    if %errorlevel% neq 0 (
-        echo [WARNING] Rtools installation failed. Please install manually.
-    ) else (
-        echo Rtools installed successfully.
+set RT_INSTALLED=0
+for %%i in (.\\runtime\\rtools*.exe) do (
+    if exist "%%i" (
+        if !RT_INSTALLED! equ 0 (
+            echo Installing Rtools silently...
+            "%%i" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+            if !errorlevel! neq 0 (
+                echo [WARNING] Rtools installation failed. Please install manually.
+            ) else (
+                echo Rtools installed successfully.
+            )
+            set RT_INSTALLED=1
+        )
     )
 )
 """
 
         return f"""@echo off
-chcp 65001 >nul
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
 :: ============================================
 :: R Package Offline Installer - Auto-generated
 :: Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 :: ============================================
 
-:: 1. Check if R is installed
-Rscript --version >nul 2>&1
-if %errorlevel% neq 0 (
+:: 0. Check / request admin privileges
+net session >nul 2>&1
+if !errorlevel! neq 0 (
+    echo [INFO] Requesting administrator privileges...
+    powershell -Command "Start-Process '%~f0' -Verb RunAs -WorkingDirectory '%~dp0'"
+    exit /b
+)
+
+:: 1. Check if R is installed (try PATH, then search common install dirs)
+set R_FOUND=0
+R --version >nul 2>&1
+if !errorlevel! equ 0 set R_FOUND=1
+if !R_FOUND! equ 0 (
+    Rscript --version >nul 2>&1
+    if !errorlevel! equ 0 set R_FOUND=1
+)
+if !R_FOUND! equ 0 (
+    echo [INFO] R not found in PATH, searching common install directories...
+    set R_DIR=
+    for /f "delims=" %%i in ('dir /s /b "C:\\Program Files\\R\\R.exe" 2^>nul') do set R_DIR=%%~dpi
+    if not defined R_DIR (
+        for /f "delims=" %%i in ('dir /s /b "%ProgramFiles(x86)%\\R\\R.exe" 2^>nul') do set R_DIR=%%~dpi
+    )
+    if not defined R_DIR (
+        for /f "delims=" %%i in ('dir /s /b "C:\\Program Files (x86)\\R\\R.exe" 2^>nul') do set R_DIR=%%~dpi
+    )
+    if defined R_DIR (
+        echo [INFO] Found R at: !R_DIR!
+        set PATH=!R_DIR!;!PATH!
+        set R_FOUND=1
+    )
+)
+if !R_FOUND! equ 0 (
     echo [WARNING] R not found! Please install R first.
-    echo Runtime installer located in .\\\runtime\ folder
+    echo Runtime installer located in .\\runtime\\ folder
     echo Run the installer manually, then re-run this script.
+    echo.
     pause
-    exit /b 1
+    goto :end
 )
 
 :: 2. Get R library path
-for /f "tokens=*" %%i in ('Rscript -e "cat(.libPaths()[1])"') do set R_LIB=%%i
-echo R library path: %R_LIB%{rtools_block}
+set R_LIB=
+for /f "tokens=*" %%i in ('Rscript -e "cat(.libPaths()[1])" 2^>nul') do set R_LIB=%%i
+if "!R_LIB!"=="" (
+    echo [ERROR] Failed to get R library path. Is R properly installed?
+    pause
+    goto :end
+)
+echo R library path: !R_LIB!{rtools_block}
 
 :: 4. Install packages (all .tar.gz format, RStudio compatible)
 echo Installing R packages...
-R CMD INSTALL --library="%R_LIB%" {pkg_install}
+echo.
+set INSTALL_FAILED=0
+for %%p in (
+{pkg_list_lines}
+) do (
+    if exist ".\\packages\\%%p" (
+        echo [%%p] Installing...
+        R CMD INSTALL --library="!R_LIB!" ".\\packages\\%%p" 2>&1
+        if !errorlevel! neq 0 (
+            echo [%%p] FAILED!
+            set INSTALL_FAILED=1
+        ) else (
+            echo [%%p] OK.
+        )
+        echo.
+    ) else (
+        echo [%%p] SKIP - file not found.
+    )
+)
+
+:: Check install result
+if !INSTALL_FAILED! neq 0 (
+    echo ============================================
+    echo [ERROR] Some packages failed to install!
+    echo Please check the error messages above.
+    echo ============================================
+) else (
+    echo All packages installed successfully!
+)
 
 :: 5. Verify installation
 echo.
 echo Verifying installation...
-Rscript -e "cat('Installation verified!')"
-if %errorlevel% equ 0 (
-    echo All packages installed successfully!
+Rscript -e "cat('Installation verified!\\n')" 2>&1
+if !errorlevel! equ 0 (
+    echo Verification OK.
 ) else (
-    echo Some packages failed to install. Please check the error messages.
+    echo Verification had issues - check messages above.
 )
 echo.
-echo Installation complete! Press any key to exit...
-pause
+echo ============================================
+echo  Installation complete! Check results above.
+echo ============================================
+echo.
+echo Press any key to close this window...
+pause >nul
+:end
+endlocal
 """
 
     @staticmethod
@@ -279,11 +365,11 @@ pause
                     package_names,
                     runtime_info.get("filename", "") if runtime_info else "",
                 )
-                with open(export_dir / "install_python.bat", "w", encoding="utf-8-sig") as f:
+                with open(export_dir / "install_python.bat", "w", encoding="utf-8", newline="\r\n") as f:
                     f.write(bat_content)
             elif lang == "r":
                 bat_content = Packager.generate_r_bat(package_files, has_rtools)
-                with open(export_dir / "install_r.bat", "w", encoding="utf-8-sig") as f:
+                with open(export_dir / "install_r.bat", "w", encoding="utf-8", newline="\r\n") as f:
                     f.write(bat_content)
 
             # 打包为 zip
