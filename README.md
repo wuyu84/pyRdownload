@@ -2,7 +2,7 @@
 
 > 内网/离线环境下，一键递归下载 Python 和 R 包及其全部依赖，打包后离线安装。
 
-在 **A 电脑纯离线、无互联网** 的环境下，需要安装 Python 或 R 的包及全部依赖时，只需在 B 服务器上部署本下载器，A 电脑打开浏览器即可搜索、下载、打包，拿到离线安装包。
+在 **A 电脑（windows系统）纯离线、无互联网** 的环境下，需要安装 Python 或 R 的包及全部依赖时，只需在 B 服务器上部署本下载器，A 电脑打开浏览器即可搜索、下载、打包，拿到离线安装包。
 
 ---
 
@@ -69,6 +69,9 @@ cd pyRdownload
 
 # 2. 安装后端依赖
 pip install -r backend/requirements.txt
+
+## 以上安装依赖如果速度较慢，可以配置国内清华源
+pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 # 3. 构建前端
 cd frontend
@@ -176,6 +179,8 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 7. 等待进度完成，下载打包的 `.zip` 文件
 
 ### 在离线电脑上安装
+
+安装脚本仅支持windows
 
 下载后，将 `.zip` 文件传输到离线电脑并解压：
 
