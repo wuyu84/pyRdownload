@@ -1,0 +1,23 @@
+services:
+  pkg-downloader:
+    build: .
+    container_name: pkg-downloader
+    ports:
+      - "3579:3579"
+    volumes:
+      - pkgdl_data:/var/lib/pkgdl/repository
+    environment:
+      - SERVER_PORT=3579
+      - HOST=0.0.0.0
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import http.client; conn=http.client.HTTPConnection('localhost:3579'); conn.request('GET','/api/health'); resp=conn.getresponse(); exit(0 if resp.status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pkgdl_data:

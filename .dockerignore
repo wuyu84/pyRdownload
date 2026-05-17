@@ -1,0 +1,14 @@
+node_modules/
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+*.pyc
+*.pyo
+logs/
+.git/
+.gitignore
+*.md
+Dockerfile
+docker-compose.yml
+.vscode/
+.idea/
